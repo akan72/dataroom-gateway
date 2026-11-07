@@ -12,7 +12,7 @@ networks:
 
 containers:
   - name: gateway
-    image: "RELEASE_IMAGE"
+    image: "ghcr.io/akan72/dataroom-gateway@sha256:380102975f41f57c75a042106ff89c2ec04aeb3c9583571877c503b2bbd2d055"
     networks: [internal]
     keys: [usage-signing]
     env:
@@ -27,7 +27,7 @@ containers:
       /data: size=512m,mode=0700
       /tmp: size=128m,mode=1777
   - name: saas
-    image: "RELEASE_IMAGE"
+    image: "ghcr.io/akan72/dataroom-gateway@sha256:380102975f41f57c75a042106ff89c2ec04aeb3c9583571877c503b2bbd2d055"
     command: ["usage_demo.saas:create_app", "--factory", "--host", "0.0.0.0", "--port", "8001", "--no-access-log"]
     networks: [internal]
     env:
@@ -36,7 +36,7 @@ containers:
     tmpfs:
       /tmp: size=128m,mode=1777
   - name: collector
-    image: "RELEASE_IMAGE"
+    image: "ghcr.io/akan72/dataroom-gateway@sha256:380102975f41f57c75a042106ff89c2ec04aeb3c9583571877c503b2bbd2d055"
     command: ["usage_demo.collector:create_app", "--factory", "--host", "0.0.0.0", "--port", "4318", "--no-access-log"]
     networks: [internal]
     env:
