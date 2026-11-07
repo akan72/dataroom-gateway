@@ -1,0 +1,50 @@
+# Draft only. Render concrete version, image digests, and receiver hostname before deployment.
+# Must become tinfoil-config.yml at the root of a public configuration repository.
+cvm-version: "REPLACE_WITH_APPROVED_V3_CVM_VERSION"
+cpus: 2
+memory: 8192
+
+attested-keys:
+  - id: usage-signing
+    key: ed25519
+
+networks:
+  internal: {}
+  export:
+    egress: allowlist
+    allow: [REPLACE_WITH_RECEIVER_HTTPS_HOSTNAME]
+
+containers:
+  - name: gateway
+    # This image embeds DuckDB. Journal snapshot → SQL → signing all execute here.
+    # Local OTel export / DuckDB is an optional owner-side inspection mirror.
+    image: "REPLACE_WITH_IMAGE_AT_SHA256_DIGEST"
+    networks: [internal, export]
+    keys: [usage-signing]
+    env:
+      - DEMO_DATA_DIR: /data
+      - DEMO_PUBLIC_UI: "1"
+      - SAAS_UPSTREAM: http://saas:8001
+      - SIGNING_KEY_PATH: /run/tinfoil/keys/usage-signing/private_key.pem
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: https://REPLACE_WITH_RECEIVER_HTTPS_HOSTNAME/v1/traces
+    secrets:
+      - GATEWAY_CONTROL_TOKEN
+      - DEMO_VISITOR_SECRET
+      - OTEL_EXPORTER_OTLP_TRACES_HEADERS
+    tmpfs:
+      /data: size=256m,mode=0700
+      /tmp: size=128m,mode=1777
+  - name: saas
+    image: "REPLACE_WITH_IMAGE_AT_SHA256_DIGEST"
+    command: ["usage_demo.saas:create_app", "--factory", "--host", "0.0.0.0", "--port", "8001", "--no-access-log"]
+    networks: [internal, export]
+    env:
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: https://REPLACE_WITH_RECEIVER_HTTPS_HOSTNAME/v1/traces
+    secrets: [OTEL_EXPORTER_OTLP_TRACES_HEADERS, DEMO_VISITOR_SECRET]
+    tmpfs:
+      /tmp: size=128m,mode=1777
+
+shim:
+  upstream-container: gateway
+  upstream-port: 8000
+  paths: [/, /live, /assets/*, /demo/*, /health, /v1/*, /evidence/*]

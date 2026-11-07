@@ -1,0 +1,51 @@
+# The image workflow replaces RELEASE_IMAGE with an immutable GHCR digest.
+cvm-version: "0.14.17"
+cpus: 2
+memory: 8192
+
+attested-keys:
+  - id: usage-signing
+    key: ed25519
+
+networks:
+  internal: {}
+
+containers:
+  - name: gateway
+    image: "RELEASE_IMAGE"
+    networks: [internal]
+    keys: [usage-signing]
+    env:
+      - DEMO_DATA_DIR: /data
+      - DEMO_PUBLIC_UI: "1"
+      - SAAS_UPSTREAM: http://saas:8001
+      - OTEL_COLLECTOR_URL: http://collector:4318
+      - SIGNING_KEY_PATH: /run/tinfoil/keys/usage-signing/private_key.pem
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://collector:4318/v1/traces
+    secrets: [GATEWAY_CONTROL_TOKEN, DEMO_VISITOR_SECRET]
+    tmpfs:
+      /data: size=512m,mode=0700
+      /tmp: size=128m,mode=1777
+  - name: saas
+    image: "RELEASE_IMAGE"
+    command: ["usage_demo.saas:create_app", "--factory", "--host", "0.0.0.0", "--port", "8001", "--no-access-log"]
+    networks: [internal]
+    env:
+      - OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: http://collector:4318/v1/traces
+    secrets: [DEMO_VISITOR_SECRET]
+    tmpfs:
+      /tmp: size=128m,mode=1777
+  - name: collector
+    image: "RELEASE_IMAGE"
+    command: ["usage_demo.collector:create_app", "--factory", "--host", "0.0.0.0", "--port", "4318", "--no-access-log"]
+    networks: [internal]
+    env:
+      - DEMO_DATA_DIR: /data
+    tmpfs:
+      /data: size=512m,mode=0700
+      /tmp: size=128m,mode=1777
+
+shim:
+  upstream-container: gateway
+  upstream-port: 8000
+  paths: [/, /live, /assets/*, /demo/*, /health, /v1/*, /evidence/*]
