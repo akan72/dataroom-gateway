@@ -7,6 +7,7 @@ import socket
 import time
 from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -14,7 +15,7 @@ from fastapi.responses import JSONResponse
 
 def writable() -> bool:
     root = Path(os.environ["PERSISTENT_ROOT"])
-    probe = root / f".write-probe-{os.getpid()}"
+    probe = root / f".write-probe-{uuid4()}"
     try:
         with probe.open("xb") as file:
             file.write(b"ready")

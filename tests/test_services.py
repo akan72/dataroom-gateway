@@ -141,6 +141,23 @@ def test_saas_enforces_uuid_scopes_and_tier_limits(no_export):
         )
 
 
+def test_saas_durable_projects_and_jobs_keep_scope_after_restart(no_export, monkeypatch, tmp_path):
+    monkeypatch.setenv("PERSISTENT_ROOT", str(tmp_path))
+    monkeypatch.setenv("DEMO_DATA_DIR", str(tmp_path / "saas"))
+    monkeypatch.setattr(saas.random, "random", lambda: 1)
+    alice, bob = USERS[:2]
+    with TestClient(saas.create_app()) as client:
+        project = client.post("/v1/projects", headers=auth(alice), json={"name": "retained"}).json()
+        job = client.post(
+            "/v1/jobs", headers=auth(alice), json={"project_id": project["id"], "units": 1}
+        ).json()
+    with TestClient(saas.create_app()) as client:
+        assert client.get("/v1/projects", headers=auth(alice)).json() == [project]
+        assert client.get(f"/v1/jobs/{job['id']}", headers=auth(alice)).json() == job
+        assert client.get("/v1/projects", headers=auth(bob)).json() == []
+        assert client.get(f"/v1/jobs/{job['id']}", headers=auth(bob)).status_code == 404
+
+
 @pytest.fixture
 def gateway_app(monkeypatch, tmp_path, no_export):
     monkeypatch.setenv("DEMO_DATA_DIR", str(tmp_path))

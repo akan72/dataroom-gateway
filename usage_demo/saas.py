@@ -39,7 +39,7 @@ def create_app() -> FastAPI:
     if os.getenv("PERSISTENT_ROOT"):
         path = Path(os.environ["DEMO_DATA_DIR"]) / "saas.sqlite"
         path.parent.mkdir(parents=True, exist_ok=True)
-        durable = sqlite3.connect(path)
+        durable = sqlite3.connect(path, check_same_thread=False)
         durable.execute("PRAGMA journal_mode=WAL")
         durable.execute("PRAGMA synchronous=FULL")
         durable.execute(
