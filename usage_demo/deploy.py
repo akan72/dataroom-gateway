@@ -15,6 +15,9 @@ def main():
     if not values.get("TINFOIL_ADMIN_KEY"):
         raise SystemExit("Configure TINFOIL_ADMIN_KEY in the project .env")
     arguments = sys.argv[1:]
+    stream = arguments[:1] == ["--stream"]
+    if stream:
+        arguments = arguments[1:]
     if not arguments or arguments[0] in ("login", "logout"):
         raise SystemExit("Pass a Tinfoil command; login/logout are unnecessary with local .env")
     environment = {
@@ -23,6 +26,9 @@ def main():
         "TINFOIL_CONFIG": str(ROOT / "data" / "tinfoil-cli-config.json"),
         "TINFOIL_NO_UPDATE_CHECK": "1",
     }
+    if stream:
+        # For the verified HTTP proxy; its process stays attached to the terminal.
+        os.execve(ROOT / "data/bin/tinfoil", ["tinfoil", *arguments], environment)
     result = subprocess.run(
         [str(ROOT / "data/bin/tinfoil"), *arguments],
         env=environment,

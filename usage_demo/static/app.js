@@ -3,6 +3,8 @@ const canonical = (value) => JSON.stringify(value, (_, v) => v && typeof v === '
 const bytes = (value) => Uint8Array.from(atob(value), c => c.charCodeAt(0));
 const escape = (value) => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let key, keyId, selectedTier = 'Free', identity, projectId, lastEnvelope, verified = 0, activeSession;
+let deploymentKey = false;
+const attestationNote = () => deploymentKey ? 'Verify the enclave and endorsed signing key independently with the Tinfoil CLI.' : 'Hardware attestation is pending in local development.';
 const seen = new Set();
 const projector = location.pathname === '/live';
 if (projector) {
@@ -78,7 +80,9 @@ function showStreamError(error) {
 async function updateState(envelope) {
   if (!await verifyEnvelope(envelope) || envelope.payload.kind !== 'public-demo-state-v1') throw Error('State signature verification failed.');
   const state = envelope.payload;
-  document.querySelector('.mode').textContent = state.key_source === 'local-development' ? 'Local development' : 'Attestation pending';
+  deploymentKey = state.key_source !== 'local-development';
+  document.querySelector('.mode').textContent = deploymentKey ? 'Tinfoil deployment' : 'Local development';
+  if (deploymentKey) $('trust-description').textContent = 'This browser checks request signatures. Enclave and signing-key attestation are verified separately with the Tinfoil CLI.';
   if (activeSession && state.session_id !== activeSession) { location.reload(); return; }
   activeSession = state.session_id;
   $('request-count').textContent = state.seq.toLocaleString();
@@ -104,7 +108,7 @@ async function addRecord(envelope) {
   row.innerHTML = `<span class="sequence">#${record.seq.toLocaleString()}</span><span class="request-detail"><strong>${escape(record.tier || 'Unauthenticated')}</strong><small>${escape(record.method)} ${escape(record.route)}</small></span><span class="http-status ${record.status >= 400 ? 'error' : ''}">${record.status} <small>${Math.round(record.elapsed_us / 1000)}ms</small></span><span class="verified">✓ Signature valid</span>`;
   row.onclick = () => {
     $('evidence-result').className = 'evidence-result good';
-    $('evidence-result').innerHTML = `<h3>Request #${record.seq}: signature verified</h3>The signed record includes its predecessor’s hash, request scope, route, outcome, and trace ID. Hardware attestation is pending.<pre>${escape(JSON.stringify(envelope,null,2))}</pre>`;
+    $('evidence-result').innerHTML = `<h3>Request #${record.seq}: signature verified</h3>The signed record includes its predecessor’s hash, request scope, route, outcome, and trace ID. ${attestationNote()}<pre>${escape(JSON.stringify(envelope,null,2))}</pre>`;
   };
   const stream = $('stream'); stream.querySelector('.empty')?.remove(); stream.prepend(row);
   while (stream.children.length > 30) stream.lastElementChild.remove();
@@ -192,7 +196,7 @@ $('sql-query').onclick = async () => {
     const payload = result.payload;
     $('evidence-result').className = 'evidence-result good';
     const rows = payload.result.map(r => `<tr><td>${escape(r.tier)}</td><td>${r.requests}</td><td>${r.active_users}</td><td>${r.successful_requests}</td><td>${r.server_errors}</td></tr>`).join('');
-    $('evidence-result').innerHTML = `<h3>SQL receipt signature verified</h3>Bound to ${payload.checkpoint.payload.record_count.toLocaleString()} requests and this browser’s fresh nonce. Cohorts need at least 3 distinct scopes. Execution is locally signed; hardware attestation is pending.${rows ? `<table class="sql-table"><thead><tr><th>Tier</th><th>Requests</th><th>Scopes</th><th>2xx</th><th>5xx</th></tr></thead><tbody>${rows}</tbody></table>` : '<p>No tier has three active scopes yet. Have three visitors join the same tier, then retry.</p>'}<details><summary>Inspect the signed SQL receipt</summary><pre>${escape(JSON.stringify(result,null,2))}</pre></details>`;
+    $('evidence-result').innerHTML = `<h3>SQL receipt signature verified</h3>Bound to ${payload.checkpoint.payload.record_count.toLocaleString()} requests and this browser’s fresh nonce. Cohorts need at least 3 distinct scopes. ${attestationNote()}${rows ? `<table class="sql-table"><thead><tr><th>Tier</th><th>Requests</th><th>Scopes</th><th>2xx</th><th>5xx</th></tr></thead><tbody>${rows}</tbody></table>` : '<p>No tier has three active scopes yet. Have three visitors join the same tier, then retry.</p>'}<details><summary>Inspect the signed SQL receipt</summary><pre>${escape(JSON.stringify(result,null,2))}</pre></details>`;
   } catch (error) { $('evidence-result').className = 'evidence-result bad'; $('evidence-result').textContent = error.message; }
   finally { $('sql-query').disabled = false; }
 };

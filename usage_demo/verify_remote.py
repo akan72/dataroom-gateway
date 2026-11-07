@@ -43,13 +43,23 @@ def key_from_verified_report(report: dict, host: str) -> str:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("url")
-    parser.add_argument("--config", type=Path, default=ROOT / "tinfoil-config.yml")
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument("--config", type=Path)
+    source.add_argument("--repo")
     parser.add_argument("--data-dir", type=Path, default=ROOT / "data/tinfoil")
     parser.add_argument("--repin", action="store_true")
     args = parser.parse_args()
     url = urlsplit(args.url)
     if url.scheme != "https" or not url.hostname or url.username or url.password:
         parser.error("Provide the public HTTPS enclave URL")
+    if args.config:
+        expected = ["--config", str(args.config.resolve())]
+    else:
+        reference = (
+            args.repo
+            or json.loads((ROOT / "deploy/release.json").read_text())["expected_reference"]
+        )
+        expected = ["--repo", reference]
     result = subprocess.run(
         [
             str(ROOT / "data/bin/tinfoil"),
@@ -58,8 +68,7 @@ def main():
             "--json",
             "--enclave",
             url.hostname,
-            "--config",
-            str(args.config.resolve()),
+            *expected,
         ],
         capture_output=True,
         text=True,

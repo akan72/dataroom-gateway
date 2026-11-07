@@ -11,9 +11,26 @@ The GitHub deployment targets `akan72/dataroom-gateway`. Its measured
 Tinfoil on a closed internal network. Telemetry stays inside the enclave in this
 deployment; no Cloudflare tunnel or external trace export is enabled.
 
-**Current mode: local development signatures, no hardware attestation.** This exercises
-the evidence protocol, not a cryptographic guarantee against the operator of this machine.
-Tinfoil deployment and independent workload/key verification are the next stage.
+Public demo: https://dataroom-gateway.akan72.containers.tinfoil.dev/
+
+Projector view: https://dataroom-gateway.akan72.containers.tinfoil.dev/live
+
+The public deployment runs inside Tinfoil. Its workload and endorsed usage-signing
+key have been independently checked with the Tinfoil CLI. The browser verifies
+request signatures; it does not independently perform hardware attestation.
+Running `make dev` locally still uses development keys. Do not infer hardware trust
+from server-reported flags: verification happens in the client.
+
+```sh
+.venv/bin/python -m usage_demo.verify_remote https://dataroom-gateway.akan72.containers.tinfoil.dev
+```
+
+The default expected release/tag/digest is recorded in `deploy/release.json`.
+The verifier checks the exact measured artifact, TLS binding, freshness, and the
+enclave-endorsed Ed25519 key, then saves a public-key pin under ignored `data/tinfoil`.
+This is separate from the signature-only browser check. Server payload fields named
+`hardware_attestation_verified` remain false by design; a server cannot establish
+its own trust. The CLI-derived verification result is the authoritative check.
 
 ```text
 Synthetic clients (9 UUID user scopes; Free / Pro / Enterprise)
