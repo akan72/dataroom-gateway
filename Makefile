@@ -1,4 +1,4 @@
-.PHONY: setup dev traffic capture index query verify inference-smoke check
+.PHONY: setup dev traffic capture index query verify inference-smoke demo-proof check
 PYTHON = .venv/bin/python
 
 setup:
@@ -17,6 +17,8 @@ verify:
 	$(PYTHON) -m usage_demo.cli verify
 inference-smoke:
 	$(PYTHON) -m usage_demo.inference
+demo-proof:
+	$(PYTHON) -m usage_demo.demo_proof
 check:
 	.venv/bin/ruff check .
 	.venv/bin/ruff format --check .

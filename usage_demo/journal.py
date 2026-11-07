@@ -2,7 +2,7 @@ import json
 import sqlite3
 import threading
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -19,7 +19,7 @@ def now() -> str:
 class Journal:
     """SQLite FULL commits precede successful gateway responses; one writer per process."""
 
-    def __init__(self, path: Path, signer: Signer, key_source: str):
+    def __init__(self, path: Path, signer: Signer, key_source: str, *, resume: bool = False):
         path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.execute("PRAGMA journal_mode=WAL")
@@ -39,6 +39,53 @@ class Journal:
         self.scopes = set()
         self.successful = 0
         self.server_errors = 0
+        if resume:
+            self.db.execute(
+                "CREATE TABLE IF NOT EXISTS journal_meta (id INTEGER PRIMARY KEY, data TEXT)"
+            )
+            saved = self.db.execute("SELECT data FROM journal_meta WHERE id=1").fetchone()
+            if saved:
+                metadata = json.loads(saved[0])
+                self.session_id = metadata["session_id"]
+                self.started_at = metadata["started_at"]
+                previous = ZERO
+                envelopes = self.db.execute(
+                    "SELECT envelope FROM records WHERE session_id=? ORDER BY seq",
+                    (self.session_id,),
+                ).fetchall()
+                for (raw,) in envelopes:
+                    envelope = json.loads(raw)
+                    record = verify(envelope, signer.public_pem)
+                    if (
+                        record["session_id"] != self.session_id
+                        or record["seq"] != self.seq + 1
+                        or record["previous_hash"] != previous
+                        or record["kind"] != "usage-record-v1"
+                    ):
+                        raise ValueError("Durable journal recovery found a broken chain")
+                    self.seq = record["seq"]
+                    previous = digest(record)
+                    self._count(record)
+                self.head = previous
+            else:
+                if self.db.execute("SELECT count(*) FROM records").fetchone()[0]:
+                    raise ValueError("Existing journal requires an explicit migration")
+                with self.db:
+                    self.db.execute(
+                        "INSERT INTO journal_meta VALUES (1, ?)",
+                        (
+                            canonical(
+                                {"session_id": self.session_id, "started_at": self.started_at}
+                            ).decode(),
+                        ),
+                    )
+
+    def _count(self, record: dict):
+        if record["user_id"] is not None:
+            self.tier_counts[record["tier"]] += 1
+            self.scopes.add(record["user_id"])
+        self.successful += int(200 <= record["status"] < 300)
+        self.server_errors += int(record["status"] >= 500)
 
     def append(self, record: dict) -> dict:
         with self.lock:
@@ -61,11 +108,7 @@ class Journal:
                 )
             self.seq = payload["seq"]
             self.head = digest(payload)
-            if record["user_id"] is not None:
-                self.tier_counts[record["tier"]] += 1
-                self.scopes.add(record["user_id"])
-            self.successful += int(200 <= record["status"] < 300)
-            self.server_errors += int(record["status"] >= 500)
+            self._count(record)
             return envelope
 
     def tail(self, after: int, limit: int = 100) -> list[dict]:
@@ -75,6 +118,16 @@ class Journal:
                 (self.session_id, after, limit),
             ).fetchall()
         return [json.loads(row[0]) for row in rows]
+
+    def recent_cursor(self) -> int:
+        cutoff = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
+        with self.lock:
+            first = self.db.execute(
+                "SELECT min(seq) FROM records WHERE session_id=? "
+                "AND json_extract(envelope, '$.payload.timestamp') >= ?",
+                (self.session_id, cutoff),
+            ).fetchone()[0]
+            return max(0, (first - 1) if first is not None else self.seq)
 
     def live_state(self) -> dict:
         with self.lock:

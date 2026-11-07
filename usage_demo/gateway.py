@@ -43,16 +43,28 @@ def create_app() -> FastAPI:
     if not token or len(token) < 24:
         raise ValueError("Set GATEWAY_CONTROL_TOKEN to at least 24 characters")
     supplied_key = os.getenv("SIGNING_KEY_PATH")
-    signer = Signer(
+    boot_signer = Signer(
         Path(supplied_key) if supplied_key else data_dir / "signing-key.pem",
         allow_create=not bool(supplied_key),
+    )
+    durable = bool(os.getenv("PERSISTENT_ROOT"))
+    signer = (
+        Signer(
+            data_dir / "journal-signing-key.pem",
+            allow_create=not (data_dir / "journal.sqlite").exists(),
+        )
+        if durable
+        else boot_signer
+    )
+    key_binding = boot_signer.sign(
+        {"kind": "usage-journal-key-binding-v1", "public_key_pem": signer.public_pem}
     )
     public_path = data_dir / "public-key.pem"
     if public_path.exists() and public_path.read_text() != signer.public_pem:
         raise ValueError("Signing key changed: use a new data directory and explicitly repin trust")
     public_path.write_text(signer.public_pem)
     key_source = "configured-key-unverified" if supplied_key else "local-development"
-    journal = Journal(data_dir / "journal.sqlite", signer, key_source)
+    journal = Journal(data_dir / "journal.sqlite", signer, key_source, resume=durable)
     telemetry = provider("usage-gateway")
     tracer = telemetry.get_tracer(__name__)
     upstream = os.getenv("SAAS_UPSTREAM", "http://127.0.0.1:8001").rstrip("/")
@@ -71,7 +83,7 @@ def create_app() -> FastAPI:
     if os.getenv("DEMO_PUBLIC_UI") == "1":
         from usage_demo.live import install_demo
 
-        install_demo(app, journal, signer)
+        install_demo(app, journal, signer, boot_signer, key_binding)
 
     async def control(request: Request):
         expected = f"Bearer {token}"
@@ -85,6 +97,8 @@ def create_app() -> FastAPI:
             "mode": key_source,
             "hardware_attestation_verified": False,
             "session_id": journal.session_id,
+            "storage": "encrypted-volume" if durable else "ephemeral",
+            "record_count": journal.seq,
         }
 
     @app.get("/evidence/public-key", dependencies=[Depends(control)])
@@ -99,6 +113,16 @@ def create_app() -> FastAPI:
     async def checkpoint():
         _, result = await asyncio.to_thread(journal.snapshot)
         return result
+
+    @app.get("/evidence/export", dependencies=[Depends(control)])
+    async def export():
+        records, snapshot = await asyncio.to_thread(journal.snapshot)
+        return {
+            "records": journal.tail(0, limit=len(records)),
+            "checkpoint": snapshot,
+            "public_key_pem": signer.public_pem,
+            "key_binding": key_binding,
+        }
 
     @app.post("/evidence/query", dependencies=[Depends(control)])
     async def query(body: QueryRequest):

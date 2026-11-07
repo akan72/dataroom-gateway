@@ -1,6 +1,10 @@
 import asyncio
+import json
+import os
 import random
+import sqlite3
 from contextlib import asynccontextmanager
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -28,6 +32,19 @@ class JobInput(BaseModel):
 
 
 def create_app() -> FastAPI:
+    from usage_demo.storage import wait_for_storage
+
+    wait_for_storage()
+    durable = None
+    if os.getenv("PERSISTENT_ROOT"):
+        path = Path(os.environ["DEMO_DATA_DIR"]) / "saas.sqlite"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        durable = sqlite3.connect(path)
+        durable.execute("PRAGMA journal_mode=WAL")
+        durable.execute("PRAGMA synchronous=FULL")
+        durable.execute(
+            "CREATE TABLE IF NOT EXISTS objects (id TEXT PRIMARY KEY, kind TEXT, data TEXT)"
+        )
     telemetry = provider("mock-saas")
     tracer = telemetry.get_tracer(__name__)
 
@@ -35,11 +52,23 @@ def create_app() -> FastAPI:
     async def lifespan(app):
         yield
         telemetry.shutdown()
+        if durable:
+            durable.close()
 
     app = FastAPI(title="Mock scoped SaaS", lifespan=lifespan)
     projects: dict[str, dict] = {}
     jobs: dict[str, dict] = {}
-    # Single-process demo state. Production would use a tenant-scoped persistent database.
+    if durable:
+        for kind, data in durable.execute("SELECT kind, data FROM objects"):
+            obj = json.loads(data)
+            (projects if kind == "project" else jobs)[obj["id"]] = obj
+
+    def save(kind, obj):
+        if durable:
+            with durable:
+                durable.execute(
+                    "INSERT INTO objects VALUES (?, ?, ?)", (obj["id"], kind, json.dumps(obj))
+                )
 
     @app.get("/health")
     async def health():
@@ -59,6 +88,7 @@ def create_app() -> FastAPI:
         if sum(p["user_id"] == user.user_id for p in projects.values()) >= limit:
             raise HTTPException(429, "Project limit for this tier reached")
         project = {"id": str(uuid4()), "name": body.name, "user_id": user.user_id}
+        save("project", project)
         projects[project["id"]] = project
         return project
 
@@ -84,6 +114,7 @@ def create_app() -> FastAPI:
                 "units": body.units,
                 "status": "complete",
             }
+            save("job", job)
             jobs[job["id"]] = job
             return job
 

@@ -403,3 +403,15 @@ Tests cover user isolation, tier restrictions, timeout recording, fail-closed jo
 errors, control-plane restrictions, cohort suppression, invalid signatures, missing
 records, duplicate exports, nonce replay, snapshot substitution, and SQL/result changes.
 Use the live commands above to validate actual HTTP export, not only in-process tests.
+
+## Current demo operations
+
+- [System diagram and trust boundaries](docs/SYSTEM.md)
+- [Presenter walkthrough](docs/LIVE_DEMO.md)
+- [Encrypted durable storage and verified unlock](docs/STORAGE.md)
+- [Three-hour synthetic traffic service](docs/SYNTHETIC_TRAFFIC.md)
+
+The deployed configuration now mounts an encrypted persistent disk for the signed
+journal, SaaS database, and private OTLP trace files. DuckDB still executes inside
+the enclave. After an enclave reboot, run the verified unlock helper using the
+original locally held disk key. No keyserver or automatic unlock is configured.

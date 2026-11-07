@@ -10,21 +10,26 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/" aria-label="Dataroom home"><svg width="31" height="31" viewBox="0 0 32 32" aria-hidden="true"><path d="M8 7h11l6 6v12H8z" fill="none" stroke="currentColor" stroke-width="2"/><path d="m12 17 4 4 9-12" fill="none" stroke="currentColor" stroke-width="2"/></svg>Dataroom</a>
-    <span class="experiment">A live usage experiment</span>
-    <nav><a id="view-link" href="/live">Open the live view</a><span class="mode">Local development</span></nav>
+    <nav><a id="view-link" href="/live">Live view</a></nav>
   </header>
   <main>
     <section class="intro">
-      <div><p class="overline">People make requests. The gateway signs what happened.</p>
-        <h1 id="headline">Your click.<br>A verifiable record.</h1>
-        <p id="subtitle">Pick a plan and run a job. Watch your API requests become signed evidence in the live stream.</p>
+      <div><h1 id="headline">Usage diligence</h1>
+        <p id="subtitle">Run a job, inspect requests, and query signed usage totals.</p>
       </div>
       <div class="intro-side"><div id="join-code" hidden><img id="qr-code" alt="QR code to join this demo" width="104" height="104"><div><strong>Join from your phone</strong><a id="join-url" href="/"></a><small id="phone-note">Scan, choose a tier, and run a job.</small></div></div><div class="trust-note"><span class="trust-symbol">◇</span><div><strong id="trust-title">Checking signatures in your browser</strong><p id="trust-description">Local signatures are not hardware attestation. Tinfoil verification is the next stage.</p></div></div></div>
     </section>
 
+    <section class="request-timeline" aria-labelledby="timeline-title">
+      <div class="section-heading"><h2 id="timeline-title">Requests over time</h2><span id="timeline-count" class="tag">Last 5 minutes</span></div>
+      <div class="timeline-legend"><span><i class="free-color"></i>Free</span><span><i class="pro-color"></i>Pro</span><span><i class="enterprise-color"></i>Enterprise</span></div>
+      <svg id="request-timeline" viewBox="0 0 1000 150" role="img" aria-label="Verified API requests over the last five minutes. Free red, Pro blue, Enterprise green."></svg>
+      <p id="timeline-empty" class="muted">Waiting for requests.</p>
+    </section>
+
     <div class="workspace">
       <section class="participant" aria-labelledby="participant-title">
-        <div class="section-heading"><h2 id="participant-title">Join the experiment</h2><span class="tag">No signup</span></div>
+        <div class="section-heading"><h2 id="participant-title">Workspace</h2><span class="tag">No signup</span></div>
         <p class="muted">Choose a simulated customer tier.</p>
         <div class="tiers" role="group" aria-label="Customer tier">
           <button class="tier selected" data-tier="Free" aria-pressed="true"><span>○</span><strong>Free</strong><small>2 units</small></button>
@@ -44,7 +49,7 @@
       </section>
 
       <section class="activity" aria-labelledby="activity-title">
-        <div class="section-heading"><h2 id="activity-title">The room, in real time</h2><span id="connection" class="connection">Connecting</span></div>
+        <div class="section-heading"><h2 id="activity-title">API requests</h2><span id="connection" class="connection">Connecting</span></div>
         <div class="stats">
           <div><strong id="request-count">—</strong><span>Signed requests</span></div>
           <div><strong id="scope-count">—</strong><span>Active scopes</span></div>
@@ -54,15 +59,14 @@
         <div class="legend"><span><i class="free-color"></i>Free <b id="free-count">0</b></span><span><i class="pro-color"></i>Pro <b id="pro-count">0</b></span><span><i class="enterprise-color"></i>Enterprise <b id="enterprise-count">0</b></span></div>
         <div class="stream-header"><span>Sequence</span><span>Tier / request</span><span>Response</span><span>Evidence</span></div>
         <div id="stream" class="stream" aria-label="Signed request stream"><div class="empty"><span>⌁</span><h3>The room is quiet.</h3><p>Run a job to put the first request on the board.</p></div></div>
-        <div class="stream-foot"><span>Live from the gateway’s committed journal</span><code id="session">Session —</code></div>
+        <div class="stream-foot"><code id="session">Session —</code></div>
       </section>
     </div>
 
     <section class="evidence-panel">
-      <div class="evidence-heading"><div><h2>Follow the evidence.</h2><p>Inspect a signed result, then try changing a record.</p></div><div class="evidence-actions"><button id="sql-query" class="secondary">Get signed usage totals</button><button id="tamper" class="secondary" disabled>Try altering a record</button></div></div>
+      <div class="evidence-heading"><div><h2>Query evidence</h2><p>SQL, results, and signatures.</p></div><div class="evidence-actions"><button id="sql-query" class="secondary">Get signed usage totals</button><button id="tamper" class="secondary" disabled>Try altering a record</button></div></div>
       <div id="evidence-result" class="evidence-result" aria-live="polite">A signed SQL receipt binds the query, its dataset snapshot, and the result. Select a request above to inspect its evidence.</div>
     </section>
-    <footer><span>Observed traffic → signed journal → OTel export → DuckDB</span><span>Public synthetic data. Real HTTP requests.</span></footer>
   </main>
   <script type="module" src="/assets/app.js"></script>
 </body>

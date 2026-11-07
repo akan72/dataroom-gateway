@@ -19,6 +19,9 @@ MAX_BATCH = 8 * 1024 * 1024
 
 
 def create_app() -> FastAPI:
+    from usage_demo.storage import wait_for_storage
+
+    wait_for_storage()
     app = FastAPI(title="Local OTLP receiver", docs_url=None, redoc_url=None)
     path = Path(os.getenv("DEMO_DATA_DIR", "data")) / "otel.jsonl"
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -33,7 +33,9 @@ class PublicQuery(BaseModel):
     nonce: UUID
 
 
-def install_demo(app: FastAPI, journal: Journal, signer: Signer):
+def install_demo(
+    app: FastAPI, journal: Journal, signer: Signer, boot_signer: Signer, key_binding: dict
+):
     if len(os.getenv("DEMO_VISITOR_SECRET", "")) < 32:
         raise ValueError("Public demo UI requires a shared DEMO_VISITOR_SECRET of 32+ characters")
     app.mount("/assets", StaticFiles(directory=STATIC), name="demo-assets")
@@ -55,6 +57,8 @@ def install_demo(app: FastAPI, journal: Journal, signer: Signer):
         return {
             "state": journal.live_state(),
             "public_key_pem": signer.public_pem,
+            "boot_public_key_pem": boot_signer.public_pem,
+            "key_binding": key_binding,
             "key_trust": "Same-origin demo key; not independently hardware-attested",
         }
 
@@ -87,7 +91,9 @@ def install_demo(app: FastAPI, journal: Journal, signer: Signer):
             raise HTTPException(400, "Invalid event cursor") from exc
 
         async def stream():
-            cursor = after or max(0, journal.live_state()["payload"]["seq"] - 16)
+            cursor = after
+            if "last-event-id" not in request.headers:
+                cursor = await asyncio.to_thread(journal.recent_cursor)
             while not await request.is_disconnected():
                 rows = await asyncio.to_thread(journal.tail, cursor)
                 for envelope in rows:

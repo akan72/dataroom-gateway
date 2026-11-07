@@ -7,8 +7,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import httpx
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+from usage_demo.crypto import verify
 
 ROOT = Path(__file__).resolve().parent.parent
 KEY_FORMAT = "https://tinfoil.sh/key/spki/v1"
@@ -78,11 +81,27 @@ def main():
         raise SystemExit("Tinfoil CLI rejected workload attestation: " + result.stderr.strip())
     report = json.loads(result.stdout)
     public_pem = key_from_verified_report(report, url.hostname)
+    boot_public_pem = public_pem
+    response = httpx.get(f"https://{url.hostname}/demo/state", timeout=30)
+    response.raise_for_status()
+    state = response.json()
+    if "key_binding" in state:
+        binding = verify(state["key_binding"], boot_public_pem)
+        if (
+            binding.get("kind") != "usage-journal-key-binding-v1"
+            or binding.get("public_key_pem") != state["public_key_pem"]
+        ):
+            raise ValueError("Enclave did not endorse the durable journal key")
+        public_pem = binding["public_key_pem"]
+    elif state["public_key_pem"] != boot_public_pem:
+        raise ValueError("Unendorsed journal key")
+    verify(state["state"], public_pem)
     args.data_dir.mkdir(parents=True, exist_ok=True)
     pin = args.data_dir / "public-key.pem"
     if pin.exists() and pin.read_text() != public_pem and not args.repin:
         raise SystemExit("Endorsed signing key changed; verify the new boot and use --repin")
     pin.write_text(public_pem)
+    (args.data_dir / "boot-public-key.pem").write_text(boot_public_pem)
     (args.data_dir / "attestation.json").write_text(json.dumps(report, indent=2) + "\n")
     print(
         json.dumps(

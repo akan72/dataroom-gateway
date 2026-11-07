@@ -1,17 +1,21 @@
+import {formatSql} from './sql.js';
+import {RequestTimeline} from './timeline.js';
+
 const $ = (id) => document.getElementById(id);
 const canonical = (value) => JSON.stringify(value, (_, v) => v && typeof v === 'object' && !Array.isArray(v) ? Object.keys(v).sort().reduce((a, k) => (a[k] = v[k], a), {}) : v);
 const bytes = (value) => Uint8Array.from(atob(value), c => c.charCodeAt(0));
 const escape = (value) => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let key, keyId, selectedTier = 'Free', identity, projectId, lastEnvelope, verified = 0, activeSession;
 let deploymentKey = false;
+const timeline = new RequestTimeline($('request-timeline'), $('timeline-count'), $('timeline-empty'));
 const attestationNote = () => deploymentKey ? 'Verify the enclave and endorsed signing key independently with the Tinfoil CLI.' : 'Hardware attestation is pending in local development.';
 const seen = new Set();
 const projector = location.pathname === '/live';
 if (projector) {
   document.body.classList.add('projector');
-  $('headline').textContent = 'Watch the room leave a trace.';
-  $('subtitle').textContent = 'Every row is a real API request. This browser checks its signature before marking it verified.';
-  $('view-link').textContent = 'Join the experiment'; $('view-link').href = '/';
+  $('headline').textContent = 'Live usage';
+  $('subtitle').textContent = 'API requests and signed query results.';
+  $('view-link').textContent = 'Open workspace'; $('view-link').href = '/';
   $('join-code').hidden = false;
   $('qr-code').src = `/demo/qr.svg?origin=${encodeURIComponent(location.origin)}`;
   $('join-url').textContent = location.host; $('join-url').href = location.origin;
@@ -81,7 +85,6 @@ async function updateState(envelope) {
   if (!await verifyEnvelope(envelope) || envelope.payload.kind !== 'public-demo-state-v1') throw Error('State signature verification failed.');
   const state = envelope.payload;
   deploymentKey = state.key_source !== 'local-development';
-  document.querySelector('.mode').textContent = deploymentKey ? 'Tinfoil deployment' : 'Local development';
   if (deploymentKey) $('trust-description').textContent = 'This browser checks request signatures. Enclave and signing-key attestation are verified separately with the Tinfoil CLI.';
   if (activeSession && state.session_id !== activeSession) { location.reload(); return; }
   activeSession = state.session_id;
@@ -103,6 +106,7 @@ async function addRecord(envelope) {
   if (seen.has(id)) return;
   seen.add(id); verified++; $('verified-count').textContent = verified.toLocaleString();
   lastEnvelope = envelope; $('tamper').disabled = false;
+  timeline.add(record);
   const row = document.createElement('button');
   row.className = 'stream-row' + (identity && record.user_id === identity.user_id ? ' mine' : '');
   row.innerHTML = `<span class="sequence">#${record.seq.toLocaleString()}</span><span class="request-detail"><strong>${escape(record.tier || 'Unauthenticated')}</strong><small>${escape(record.method)} ${escape(record.route)}</small></span><span class="http-status ${record.status >= 400 ? 'error' : ''}">${record.status} <small>${Math.round(record.elapsed_us / 1000)}ms</small></span><span class="verified">✓ Signature valid</span>`;
@@ -196,7 +200,7 @@ $('sql-query').onclick = async () => {
     const payload = result.payload;
     $('evidence-result').className = 'evidence-result good';
     const rows = payload.result.map(r => `<tr><td>${escape(r.tier)}</td><td>${r.requests}</td><td>${r.active_users}</td><td>${r.successful_requests}</td><td>${r.server_errors}</td></tr>`).join('');
-    $('evidence-result').innerHTML = `<h3>SQL receipt signature verified</h3>Bound to ${payload.checkpoint.payload.record_count.toLocaleString()} requests and this browser’s fresh nonce. Cohorts need at least 3 distinct scopes. ${attestationNote()}${rows ? `<table class="sql-table"><thead><tr><th>Tier</th><th>Requests</th><th>Scopes</th><th>2xx</th><th>5xx</th></tr></thead><tbody>${rows}</tbody></table>` : '<p>No tier has three active scopes yet. Have three visitors join the same tier, then retry.</p>'}<details><summary>Inspect the signed SQL receipt</summary><pre>${escape(JSON.stringify(result,null,2))}</pre></details>`;
+    $('evidence-result').innerHTML = `<h3>SQL receipt signature verified</h3>Bound to ${payload.checkpoint.payload.record_count.toLocaleString()} requests and this browser’s fresh nonce. Cohorts need at least 3 distinct scopes. ${attestationNote()}<section class="sql-execution" aria-labelledby="executed-sql-title"><div class="sql-heading"><h4 id="executed-sql-title">SQL executed</h4><code>${escape(payload.engine)}</code></div><pre class="sql-source" tabindex="0" aria-label="SQL executed for this signed result"><code>${escape(formatSql(payload.sql))}</code></pre></section>${rows ? `<table class="sql-table"><thead><tr><th>Tier</th><th>Requests</th><th>Scopes</th><th>2xx</th><th>5xx</th></tr></thead><tbody>${rows}</tbody></table>` : '<p>No tier has three active scopes yet. Have three visitors join the same tier, then retry.</p>'}<details><summary>Inspect the signed SQL receipt</summary><pre>${escape(JSON.stringify(result,null,2))}</pre></details>`;
   } catch (error) { $('evidence-result').className = 'evidence-result bad'; $('evidence-result').textContent = error.message; }
   finally { $('sql-query').disabled = false; }
 };
