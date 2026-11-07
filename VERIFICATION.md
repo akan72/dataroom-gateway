@@ -1,4 +1,37 @@
-# Local end-to-end verification — November 7, 2026
+# End-to-end verification — November 7, 2026
+
+## Live Tinfoil deployment
+
+Public app: https://dataroom-gateway.akan72.containers.tinfoil.dev/
+
+Projector: https://dataroom-gateway.akan72.containers.tinfoil.dev/live
+
+The running `v0.1.1` workload has confidential computing enabled and debug mode
+disabled. Gateway/DuckDB, SaaS, and the OTel collector run inside the enclave.
+Raw telemetry stays inside Tinfoil; no public tunnel was opened.
+
+- The official CLI verified the measured release, hardware measurement, and TLS key.
+- Expected artifact digest: `deaa4f4d36e2adf6bcb9b4cf9957a0b723c684c47e636741ae91c19966fb7ddc`.
+- The CLI's endorsed `usage-signing` Ed25519 key matched the application's public key.
+- A full request run through an attestation-verifying proxy processed 1,018 requests:
+  319 × 200, 621 × 201, and 78 × 503.
+- A signed `duckdb/1.5.6` receipt matched all 1,018 requests and 78 observed server errors.
+- Eight isolated public browser contexts then joined concurrently, each with its own
+  UUID scope. The projector count increased from 1,018 to 1,042 and verified the new
+  signatures. The browser verified a fresh SQL receipt covering those 1,042 requests.
+- At that point the control-only collector check reported 5,581 spans persisted inside
+  Tinfoil. Later visitor actions increase these counters.
+- Changed-result signatures, wrong nonces, arbitrary SQL, and visitor access to the
+  control API were rejected. A different artifact pin was rejected at provenance checks.
+- The public mobile flow works at 390px without horizontal overflow.
+- Local tests: 35 pass; lint and formatting checks pass.
+
+Hardware verification is performed independently by the official CLI. The browser
+checks signatures and says so; it does not claim to perform hardware attestation.
+Server fields intentionally do not self-assert hardware trust. Data and keys are
+ephemeral across enclave redeployments; fresh attestation/repinning is required.
+
+The following sections preserve the earlier local development checks.
 
 Scope: the local example before Tinfoil credentials. No hardware attestation or
 cloud deployment has been verified. No GPU resources were needed for this stage.
@@ -78,7 +111,7 @@ on a read-only root filesystem. Regression tests cover the environment default a
 explicit command-line override. The container has no hardware attestation; this check
 proves packaging and execution location, not enclave security.
 
-## Remaining Tinfoil stage
+## Hosted inference integration
 
 Hosted model inference has now been independently exercised through the official
 Python SDK; this is distinct from deploying the usage gateway:
@@ -97,8 +130,6 @@ The key is held only in the ignored local `.env`; no credential is included in
 this report or source code. The hosted inference check attests Tinfoil's model
 endpoint. It does not attest our gateway, user traffic, or DuckDB SQL receipts.
 
-The image has been built and exercised locally but has not been deployed/validated
-on Tinfoil. The Tinfoil configuration remains a template. Deployment requires credentials,
-a concrete public configuration repository and image digest, an authenticated HTTPS
-route back to this machine, and independent SDK verification of the approved workload
-and attested signing key. See the README's Tinfoil handoff for the exact boundaries.
+The subsequent gateway deployment and hardware/key verification are recorded at the
+top of this document. The deployed config is `tinfoil-config.yml`; the separate
+external-export example remains optional and undeployed.

@@ -363,7 +363,7 @@ an Ed25519 key, and restricts export to one receiver hostname. Its `/data` stora
 is ephemeral tmpfs: a new enclave starts a new collection history. Persistent sealed
 storage and rollback protection are intentionally not claimed.
 
-Before live Tinfoil verification:
+For optional external trace export in a future deployment:
 
 1. Build the image for Tinfoil's target architecture, publish it, and replace image
    placeholders with immutable digests. Publish the concrete measured config in a
@@ -379,12 +379,15 @@ Before live Tinfoil verification:
    key. Ordinary HTTPS plus `/evidence/public-key` is insufficient.
 5. Connect using verified Tinfoil client transport, retain checkpoints on the buyer's
    side, and test wrong-workload, wrong-key, stale-session, and tampered-result rejection.
-   The current CLI is an ordinary local HTTP client, not a Tinfoil verifier.
+   `usage_demo.cli` is an ordinary HTTP client: route it through the verified
+   Tinfoil proxy for remote control requests. `usage_demo.verify_remote` performs
+   independent enclave and signing-key verification through the official CLI.
 
 `SIGNING_KEY_PATH` loads a configured PKCS#8 Ed25519 PEM file (for example
 `/run/tinfoil/keys/usage-signing/private_key.pem`). A missing configured key fails startup;
 it never silently creates a local key. Configured keys still report
-`hardware_attestation_verified: false` until the client verification is implemented.
+`hardware_attestation_verified: false` because hardware trust must be established
+independently by the client, not self-asserted by the service.
 
 References: [Tinfoil configuration](https://docs.tinfoil.sh/containers/configuration),
 [attested keys](https://docs.tinfoil.sh/containers/attested-keys),
